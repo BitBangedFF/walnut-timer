@@ -1,6 +1,9 @@
 // TODO
+// - reasonable conversion and display of seconds/minutes/etc
+// - list hw/etc/diagram
 // - cleanup pitches.h
-// - use timer1 for time counter
+// - wdt
+// - use timer1 for time counter or just elapsed time?
 // could use a library, but easier to just setup the registers
 // http://www.robotshop.com/letsmakerobots/arduino-101-timers-and-interrupts
 
@@ -9,46 +12,54 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_LEDBackpack.h>
 #include <Bounce2.h>
+#include <elapsedMillis.h>
 #include "pitches.h"
 
 #define DISPLAY_ADDRESS (0x70)
 #define BRIGHTNESS (15)
 
-#define AMP_ENABLE_DELAY (5)
-#define DEBOUNCE_DELAY (5)
+#define AMP_ENABLE_DELAY (5UL)
+#define DEBOUNCE_DELAY (5UL)
+#define IS_ADJUSTING_DELAY (25UL)
+
+#define DEFAULT_TIMER_SETPOINT_SEC (30UL)
 
 #define PIN_AMP_SHUTDOWN (2)
 #define PIN_AUDIO (3)
 #define PIN_SW0 (4)
 #define PIN_SW1 (5)
 #define PIN_SW2 (6)
+#define PIN_SDA (A4)
+#define PIN_SCL (A5)
 
-// SDA (D) - A4
-// SCL (C) - A5
+#define NOTE_TYPE_TO_DUR(t) (1000UL/t)
 
-#define NOTE_TYPE_TO_DURATION(t) (1000/t)
+#define SEC_TO_MS(s) (s*1000UL)
 
 typedef struct
 {
     uint16_t freq;
-    uint16_t duration;
+    uint16_t dur;
 } melody_tone_s;
 
 Adafruit_7segment seg_display = Adafruit_7segment();
 Bounce sw0_db = Bounce();
 Bounce sw1_db = Bounce();
 Bounce sw2_db = Bounce();
+elapsedMillis timer_elapsed_ms;
+
+static uint32_t timer_setpoint;
 
 static const melody_tone_s melody_tones[] =
 {
-    {NOTE_C4, NOTE_TYPE_TO_DURATION(4)},
-    {NOTE_G3, NOTE_TYPE_TO_DURATION(8)},
-    {NOTE_G3, NOTE_TYPE_TO_DURATION(8)},
-    {NOTE_A3, NOTE_TYPE_TO_DURATION(4)},
-    {NOTE_G3, NOTE_TYPE_TO_DURATION(4)},
-    {NOTE_OFF, NOTE_TYPE_TO_DURATION(4)},
-    {NOTE_B3, NOTE_TYPE_TO_DURATION(4)},
-    {NOTE_C4, NOTE_TYPE_TO_DURATION(4)}
+    {NOTE_C4, NOTE_TYPE_TO_DUR(4)},
+    {NOTE_G3, NOTE_TYPE_TO_DUR(8)},
+    {NOTE_G3, NOTE_TYPE_TO_DUR(8)},
+    {NOTE_A3, NOTE_TYPE_TO_DUR(4)},
+    {NOTE_G3, NOTE_TYPE_TO_DUR(4)},
+    {NOTE_OFF, NOTE_TYPE_TO_DUR(4)},
+    {NOTE_B3, NOTE_TYPE_TO_DUR(4)},
+    {NOTE_C4, NOTE_TYPE_TO_DUR(4)}
 };
 
 static void disable_amp(void)
@@ -73,16 +84,48 @@ static void play_melody(void)
     uint16_t idx;
     for(idx = 0; idx < len; idx += 1)
     {
-        tone(PIN_AUDIO, melody_tones[idx].freq, melody_tones[idx].duration);
+        tone(PIN_AUDIO, melody_tones[idx].freq, melody_tones[idx].dur);
 
         // plus 30 % of duration between notes
-        const float delay_f = ((float) melody_tones[idx].duration) * 1.30f;
+        const float delay_f = ((float) melody_tones[idx].dur) * 1.30f;
         delay((unsigned long) delay_f);
 
         noTone(PIN_AUDIO);
     }
 
     disable_amp();
+}
+
+static bool check_for_timer_adjustment(void)
+{
+    bool is_adjusting = false;
+
+    if(sw2_db.read() == true)
+    {
+        is_adjusting = true;
+
+        if(timer_setpoint < (UINT32_MAX - 1))
+        {
+            timer_setpoint += SEC_TO_MS(1);
+        }
+    }
+    else if(sw1_db.read() == true)
+    {
+        is_adjusting = true;
+
+        if(timer_setpoint >= SEC_TO_MS(1))
+        {
+            timer_setpoint -= SEC_TO_MS(1);
+        }
+    }
+
+    return is_adjusting;
+}
+
+static void render_timer_setpoint(void)
+{
+    // TODO
+    seg_display.writeDisplay();
 }
 
 void setup()
@@ -103,13 +146,36 @@ void setup()
     sw1_db.interval(DEBOUNCE_DELAY);
     sw2_db.attach(PIN_SW2);
     sw2_db.interval(DEBOUNCE_DELAY);
-    
+
+    timer_elapsed_ms = 0;
+    timer_setpoint = DEFAULT_TIMER_SETPOINT_SEC;
+
     seg_display.begin(DISPLAY_ADDRESS);
     seg_display.setBrightness(BRIGHTNESS);
+
+    render_timer_setpoint();
 }
 
 void loop()
 {
+    sw0_db.update();
+    sw1_db.update();
+    sw2_db.update();
+
+    const bool is_adj = check_for_timer_adjustment();
+
+    if(is_adj == true)
+    {
+        render_timer_setpoint();
+        delay(IS_ADJUSTING_DELAY);
+    }
+
+
+    // TESTING
+    delay(500);
+
+
+    /*
     //seg_display.writeDisplay();
 
     // returns true on state change
@@ -119,10 +185,11 @@ void loop()
 
     // time +/- should show/adjust the time until timer is started
     // when timer is running, time counts up, pause on press, resume on press, reset on hold?
-    
+
     // sw0_db.read()
 
     play_melody();
-    
+
     delay(5000);
+    */
 }

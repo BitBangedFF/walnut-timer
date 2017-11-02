@@ -9,6 +9,7 @@
 // http://www.robotshop.com/letsmakerobots/arduino-101-timers-and-interrupts
 
 #include <stdint.h>
+#include <limits.h>
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_LEDBackpack.h>
@@ -21,7 +22,7 @@
 
 #define STARTUP_DELAY (50UL)
 #define AMP_ENABLE_DELAY (5UL)
-#define RENDER_DELAY (5UL)
+#define RENDER_DELAY (10UL)
 
 #define BUTTON_HOLD_INTERVAL (400)
 #define DEBOUNCE_INTERVAL (5UL)
@@ -53,8 +54,8 @@ Bounce sw1_db = Bounce();
 Bounce sw2_db = Bounce();
 elapsedMillis timer_elapsed_ms;
 
-static uint32_t timer_setpoint;
-static uint32_t timer_paused_value;
+static unsigned long timer_setpoint;
+static unsigned long timer_paused_value;
 static bool timer_running;
 static bool is_adjusting;
 
@@ -112,7 +113,7 @@ static bool check_for_timer_adjustment(void)
     {
         is_adj = true;
 
-        if(timer_setpoint < (UINT32_MAX - 1))
+        if(timer_setpoint < (ULONG_MAX - 1))
         {
             timer_setpoint += SEC_TO_MS(1);
         }
@@ -121,7 +122,7 @@ static bool check_for_timer_adjustment(void)
     {
         is_adj = true;
 
-        if(timer_setpoint >= SEC_TO_MS(1))
+        if(timer_setpoint > SEC_TO_MS(1))
         {
             timer_setpoint -= SEC_TO_MS(1);
         }
@@ -140,13 +141,13 @@ static bool check_for_start_stop(void)
 
         if(timer_running == true)
         {
-            timer_paused_value = (uint32_t) timer_elapsed_ms;
+            timer_paused_value = timer_elapsed_ms;
             timer_running = false;
         }
         else
         {
             timer_running = true;
-            timer_elapsed_ms = (unsigned long) timer_paused_value;
+            timer_elapsed_ms = timer_paused_value;
             timer_paused_value = 0;
         }
     }
@@ -157,27 +158,45 @@ static bool check_for_start_stop(void)
 static void render_timer_setpoint(void)
 {
     seg_display.print(
-            (unsigned long) MS_TO_SEC(timer_setpoint),
+            MS_TO_SEC(timer_setpoint),
             DEC);
 
+    seg_display.drawColon(true);
     seg_display.writeDisplay();
 }
 
 static void render_timer_elapsed(void)
 {
+    unsigned long ms_val;
+
     if(timer_running == true)
     {
-        seg_display.print(
-                (unsigned long) MS_TO_SEC(timer_elapsed_ms),
-                DEC);
+        if(timer_elapsed_ms <= timer_setpoint)
+        {
+            ms_val = (timer_setpoint - timer_elapsed_ms);
+        }
+        else
+        {
+            ms_val = 0;
+        }
     }
     else
     {
-        seg_display.print(
-                (unsigned long) MS_TO_SEC(timer_paused_value),
-                DEC);
+        if(timer_paused_value <= timer_setpoint)
+        {
+            ms_val = (timer_setpoint - timer_paused_value);
+        }
+        else
+        {
+            ms_val = 0;
+        }
     }
 
+    seg_display.print(
+            MS_TO_SEC(ms_val),
+            DEC);
+
+    seg_display.drawColon(true);
     seg_display.writeDisplay();
 }
 
@@ -228,6 +247,7 @@ void loop()
     {
         timer_running = false;
         is_adjusting = true;
+        timer_paused_value = 0;
     }
     
     if(check_for_start_stop() == true)
@@ -237,12 +257,15 @@ void loop()
 
     if(timer_running == true)
     {
-        if(timer_elapsed_ms >= (unsigned long) timer_setpoint)
+        if(timer_elapsed_ms >= timer_setpoint)
         {   
-            render_timer_elapsed();
+            seg_display.blinkRate(1);
             timer_running = false;
+            is_adjusting = true;
+            render_timer_setpoint();
             //play_melody();
-            delay(100);
+            delay(3000);
+            seg_display.blinkRate(0);
         }
     }
 

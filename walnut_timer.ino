@@ -1,5 +1,6 @@
 // TODO
 // - reasonable conversion and display of seconds/minutes/etc
+// - hold for fast +/-
 // - list hw/etc/diagram
 // - cleanup pitches.h
 // - wdt
@@ -18,11 +19,14 @@
 #define DISPLAY_ADDRESS (0x70)
 #define BRIGHTNESS (15)
 
+#define STARTUP_DELAY (50UL)
 #define AMP_ENABLE_DELAY (5UL)
-#define DEBOUNCE_DELAY (5UL)
-#define IS_ADJUSTING_DELAY (25UL)
+#define RENDER_DELAY (5UL)
 
-#define DEFAULT_TIMER_SETPOINT_SEC (30UL)
+#define BUTTON_HOLD_INTERVAL (400)
+#define DEBOUNCE_INTERVAL (5UL)
+
+#define DEFAULT_TIMER_SETPOINT_SEC (10UL)
 
 #define PIN_AMP_SHUTDOWN (2)
 #define PIN_AUDIO (3)
@@ -35,6 +39,7 @@
 #define NOTE_TYPE_TO_DUR(t) (1000UL/t)
 
 #define SEC_TO_MS(s) (s*1000UL)
+#define MS_TO_SEC(ms) (ms/1000UL)
 
 typedef struct
 {
@@ -49,6 +54,9 @@ Bounce sw2_db = Bounce();
 elapsedMillis timer_elapsed_ms;
 
 static uint32_t timer_setpoint;
+static uint32_t timer_paused_value;
+static bool timer_running;
+static bool is_adjusting;
 
 static const melody_tone_s melody_tones[] =
 {
@@ -98,20 +106,20 @@ static void play_melody(void)
 
 static bool check_for_timer_adjustment(void)
 {
-    bool is_adjusting = false;
+    bool is_adj = false;
 
-    if(sw2_db.read() == true)
+    if((sw2_db.read() == false) && (sw2_db.fell() == true))
     {
-        is_adjusting = true;
+        is_adj = true;
 
         if(timer_setpoint < (UINT32_MAX - 1))
         {
             timer_setpoint += SEC_TO_MS(1);
         }
     }
-    else if(sw1_db.read() == true)
+    else if((sw1_db.read() == false) && (sw1_db.fell() == true))
     {
-        is_adjusting = true;
+        is_adj = true;
 
         if(timer_setpoint >= SEC_TO_MS(1))
         {
@@ -119,12 +127,57 @@ static bool check_for_timer_adjustment(void)
         }
     }
 
-    return is_adjusting;
+    return is_adj;
+}
+
+static bool check_for_start_stop(void)
+{
+    bool changed = false;
+    
+    if((sw0_db.read() == false) && (sw0_db.fell() == true))
+    {
+        changed = true;
+
+        if(timer_running == true)
+        {
+            timer_paused_value = (uint32_t) timer_elapsed_ms;
+            timer_running = false;
+        }
+        else
+        {
+            timer_running = true;
+            timer_elapsed_ms = (unsigned long) timer_paused_value;
+            timer_paused_value = 0;
+        }
+    }
+
+    return changed;
 }
 
 static void render_timer_setpoint(void)
 {
-    // TODO
+    seg_display.print(
+            (unsigned long) MS_TO_SEC(timer_setpoint),
+            DEC);
+
+    seg_display.writeDisplay();
+}
+
+static void render_timer_elapsed(void)
+{
+    if(timer_running == true)
+    {
+        seg_display.print(
+                (unsigned long) MS_TO_SEC(timer_elapsed_ms),
+                DEC);
+    }
+    else
+    {
+        seg_display.print(
+                (unsigned long) MS_TO_SEC(timer_paused_value),
+                DEC);
+    }
+
     seg_display.writeDisplay();
 }
 
@@ -141,17 +194,24 @@ void setup()
     pinMode(PIN_SW2, INPUT_PULLUP);
 
     sw0_db.attach(PIN_SW0);
-    sw0_db.interval(DEBOUNCE_DELAY);
+    sw0_db.interval(DEBOUNCE_INTERVAL);
     sw1_db.attach(PIN_SW1);
-    sw1_db.interval(DEBOUNCE_DELAY);
+    sw1_db.interval(DEBOUNCE_INTERVAL);
     sw2_db.attach(PIN_SW2);
-    sw2_db.interval(DEBOUNCE_DELAY);
+    sw2_db.interval(DEBOUNCE_INTERVAL);
 
+    timer_setpoint = SEC_TO_MS(DEFAULT_TIMER_SETPOINT_SEC);
     timer_elapsed_ms = 0;
-    timer_setpoint = DEFAULT_TIMER_SETPOINT_SEC;
+    timer_paused_value = 0;
+    timer_running = false;
+    is_adjusting = true;
 
     seg_display.begin(DISPLAY_ADDRESS);
     seg_display.setBrightness(BRIGHTNESS);
+    seg_display.clear();
+    seg_display.writeDisplay();
+
+    delay(STARTUP_DELAY);
 
     render_timer_setpoint();
 }
@@ -162,34 +222,40 @@ void loop()
     sw1_db.update();
     sw2_db.update();
 
-    const bool is_adj = check_for_timer_adjustment();
+    const bool new_adjustment = check_for_timer_adjustment();
 
-    if(is_adj == true)
+    if(new_adjustment == true)
     {
-        render_timer_setpoint();
-        delay(IS_ADJUSTING_DELAY);
+        timer_running = false;
+        is_adjusting = true;
+    }
+    
+    if(check_for_start_stop() == true)
+    {
+        is_adjusting = false;
     }
 
+    if(timer_running == true)
+    {
+        if(timer_elapsed_ms >= (unsigned long) timer_setpoint)
+        {   
+            render_timer_elapsed();
+            timer_running = false;
+            //play_melody();
+            delay(100);
+        }
+    }
 
-    // TESTING
-    delay(500);
-
-
-    /*
-    //seg_display.writeDisplay();
-
-    // returns true on state change
-    sw0_db.update();
-    sw1_db.update();
-    sw2_db.update();
-
-    // time +/- should show/adjust the time until timer is started
-    // when timer is running, time counts up, pause on press, resume on press, reset on hold?
-
-    // sw0_db.read()
-
-    play_melody();
-
-    delay(5000);
-    */
+    if(is_adjusting == false)
+    {
+        render_timer_elapsed();
+        delay(RENDER_DELAY);
+    }
+    else
+    {
+        if(new_adjustment == true)
+        {
+            render_timer_setpoint();
+        }
+    }
 }

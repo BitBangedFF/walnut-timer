@@ -27,6 +27,8 @@
 #define BUTTON_HOLD_INTERVAL (200UL)
 #define DEBOUNCE_INTERVAL (5UL)
 
+#define BUTTON_LONG_HOLD_COUNT (15UL)
+
 #define DEFAULT_TIMER_SETPOINT_SEC (30UL)
 
 #define PIN_AMP_SHUTDOWN (2)
@@ -59,6 +61,7 @@ static unsigned long timer_setpoint;
 static unsigned long timer_paused_value;
 static bool timer_running;
 static bool is_adjusting;
+static unsigned long adj_hold_count;
 
 static const melody_tone_s melody_tones[] =
 {
@@ -118,12 +121,22 @@ static bool check_for_timer_adjustment(void)
         if(sw2_db.fell() == true)
         {
             adj_hold_elapsed = 0;
+            adj_hold_count = 0;
             adj = SEC_TO_MS(1);
         }
         else if(adj_hold_elapsed > BUTTON_HOLD_INTERVAL)
         {
             adj_hold_elapsed = 0;
-            adj = SEC_TO_MS(2);
+            adj_hold_count += 1;
+
+            if(adj_hold_count >= BUTTON_LONG_HOLD_COUNT)
+            {
+                adj = SEC_TO_MS(30);
+            }
+            else
+            {
+                adj = SEC_TO_MS(2);
+            }
         }
 
         if(adj != 0)
@@ -141,12 +154,22 @@ static bool check_for_timer_adjustment(void)
         if(sw1_db.fell() == true)
         {
             adj_hold_elapsed = 0;
+            adj_hold_count = 0;
             adj = SEC_TO_MS(1);
         }
         else if(adj_hold_elapsed > BUTTON_HOLD_INTERVAL)
         {
             adj_hold_elapsed = 0;
-            adj = SEC_TO_MS(2);
+            adj_hold_count += 1;
+
+            if(adj_hold_count >= BUTTON_LONG_HOLD_COUNT)
+            {
+                adj = SEC_TO_MS(30);
+            }
+            else
+            {
+                adj = SEC_TO_MS(2);
+            }
         }
 
         if(adj != 0)
@@ -251,9 +274,11 @@ void setup()
 
     timer_setpoint = SEC_TO_MS(DEFAULT_TIMER_SETPOINT_SEC);
     timer_elapsed = 0;
+    adj_hold_elapsed = 0;
     timer_paused_value = 0;
     timer_running = false;
     is_adjusting = true;
+    adj_hold_count = 0;
 
     seg_display.begin(DISPLAY_ADDRESS);
     seg_display.setBrightness(BRIGHTNESS);

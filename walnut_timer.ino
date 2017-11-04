@@ -1,13 +1,9 @@
 // TODO
-// - reasonable conversion and display of seconds/minutes/etc
-// - hold for fast +/-
 // - list hw/etc/diagram
 // - cleanup pitches.h
 // - wdt
-// - use timer1 for time counter or just elapsed time?
-// could use a library, but easier to just setup the registers
-// http://www.robotshop.com/letsmakerobots/arduino-101-timers-and-interrupts
 
+#include <avr/wdt.h>
 #include <stdint.h>
 #include <limits.h>
 #include <string.h>
@@ -30,7 +26,10 @@
 
 #define BUTTON_LONG_HOLD_COUNT (15UL)
 
-#define DEFAULT_TIMER_SETPOINT_SEC (30UL)
+// default is 5 minutes and 15 seconds == 315 seconds
+#define DEFAULT_TIMER_SETPOINT_SEC (315UL)
+
+#define WATCHDOG_TIMEOUT (WDTO_4S)
 
 #define PIN_AMP_SHUTDOWN (2)
 #define PIN_AUDIO (3)
@@ -52,9 +51,9 @@ typedef struct
 } melody_tone_s;
 
 Adafruit_7segment seg_display = Adafruit_7segment();
-Bounce sw0_db = Bounce();
-Bounce sw1_db = Bounce();
-Bounce sw2_db = Bounce();
+Bounce btn_start_stop = Bounce();
+Bounce btn_adj_down = Bounce();
+Bounce btn_adj_up = Bounce();
 elapsedMillis timer_elapsed;
 elapsedMillis adj_hold_elapsed;
 
@@ -115,11 +114,11 @@ static bool check_for_timer_adjustment(void)
     bool is_adj = false;
     unsigned long adj = 0;
 
-    if(sw2_db.read() == false)
+    if(btn_adj_up.read() == false)
     {
         is_adj = true;
 
-        if(sw2_db.fell() == true)
+        if(btn_adj_up.fell() == true)
         {
             adj_hold_elapsed = 0;
             adj_hold_count = 0;
@@ -148,11 +147,11 @@ static bool check_for_timer_adjustment(void)
             }
         }
     }
-    else if(sw1_db.read() == false)
+    else if(btn_adj_down.read() == false)
     {
         is_adj = true;
 
-        if(sw1_db.fell() == true)
+        if(btn_adj_down.fell() == true)
         {
             adj_hold_elapsed = 0;
             adj_hold_count = 0;
@@ -196,7 +195,7 @@ static bool check_for_start_stop(void)
 {
     bool changed = false;
 
-    if((sw0_db.read() == false) && (sw0_db.fell() == true))
+    if((btn_start_stop.read() == false) && (btn_start_stop.fell() == true))
     {
         changed = true;
 
@@ -223,7 +222,7 @@ static void render_time(
     const unsigned long secs = now % 60;
     const unsigned long mins = (now / 60) % 60;
 
-    char str[6];
+    char str[8];
     (void) snprintf(
             str,
             sizeof(str),
@@ -233,19 +232,19 @@ static void render_time(
 
     seg_display.writeDigitNum(
             0,
-            str[0] - '0',
+            (uint8_t) (str[0] - '0'),
             false);
     seg_display.writeDigitNum(
             1,
-            str[1] - '0',
+            (uint8_t) (str[1] - '0'),
             false);
     seg_display.writeDigitNum(
             3,
-            str[2] - '0',
+            (uint8_t) (str[2] - '0'),
             false);
     seg_display.writeDigitNum(
             4,
-            str[3] - '0',
+            (uint8_t) (str[3] - '0'),
             false);
 }
 
@@ -292,6 +291,10 @@ static void render_timer_elapsed(void)
 
 void setup()
 {
+    wdt_disable();
+    wdt_enable(WATCHDOG_TIMEOUT);
+    wdt_reset();
+
     pinMode(PIN_AUDIO, OUTPUT);
     digitalWrite(PIN_AUDIO, LOW);
 
@@ -302,12 +305,12 @@ void setup()
     pinMode(PIN_SW1, INPUT_PULLUP);
     pinMode(PIN_SW2, INPUT_PULLUP);
 
-    sw0_db.attach(PIN_SW0);
-    sw0_db.interval(DEBOUNCE_INTERVAL);
-    sw1_db.attach(PIN_SW1);
-    sw1_db.interval(DEBOUNCE_INTERVAL);
-    sw2_db.attach(PIN_SW2);
-    sw2_db.interval(DEBOUNCE_INTERVAL);
+    btn_start_stop.attach(PIN_SW0);
+    btn_start_stop.interval(DEBOUNCE_INTERVAL);
+    btn_adj_down.attach(PIN_SW1);
+    btn_adj_down.interval(DEBOUNCE_INTERVAL);
+    btn_adj_up.attach(PIN_SW2);
+    btn_adj_up.interval(DEBOUNCE_INTERVAL);
 
     timer_setpoint = SEC_TO_MS(DEFAULT_TIMER_SETPOINT_SEC);
     timer_elapsed = 0;
@@ -329,9 +332,11 @@ void setup()
 
 void loop()
 {
-    sw0_db.update();
-    sw1_db.update();
-    sw2_db.update();
+    wdt_reset();
+
+    btn_start_stop.update();
+    btn_adj_down.update();
+    btn_adj_up.update();
 
     const bool new_adjustment = check_for_timer_adjustment();
 

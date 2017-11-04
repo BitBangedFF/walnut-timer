@@ -10,6 +10,7 @@
 
 #include <stdint.h>
 #include <limits.h>
+#include <string.h>
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_LEDBackpack.h>
@@ -174,9 +175,16 @@ static bool check_for_timer_adjustment(void)
 
         if(adj != 0)
         {
-            if(timer_setpoint > SEC_TO_MS(1))
+            if(timer_setpoint > adj)
             {
                 timer_setpoint -= adj;
+            }
+            else
+            {
+                if(timer_setpoint > SEC_TO_MS(1))
+                {
+                    timer_setpoint -= SEC_TO_MS(1);
+                }
             }
         }
     }
@@ -208,11 +216,42 @@ static bool check_for_start_stop(void)
     return changed;
 }
 
+static void render_time(
+        const unsigned long time)
+{
+    const unsigned long now = time / 1000;
+    const unsigned long secs = now % 60;
+    const unsigned long mins = (now / 60) % 60;
+
+    char str[6];
+    (void) snprintf(
+            str,
+            sizeof(str),
+            "%02lu%02lu",
+            mins,
+            secs);
+
+    seg_display.writeDigitNum(
+            0,
+            str[0] - '0',
+            false);
+    seg_display.writeDigitNum(
+            1,
+            str[1] - '0',
+            false);
+    seg_display.writeDigitNum(
+            3,
+            str[2] - '0',
+            false);
+    seg_display.writeDigitNum(
+            4,
+            str[3] - '0',
+            false);
+}
+
 static void render_timer_setpoint(void)
 {
-    seg_display.print(
-            MS_TO_SEC(timer_setpoint),
-            DEC);
+    render_time(timer_setpoint);
 
     seg_display.drawColon(true);
     seg_display.writeDisplay();
@@ -245,9 +284,7 @@ static void render_timer_elapsed(void)
         }
     }
 
-    seg_display.print(
-            MS_TO_SEC(ms_val),
-            DEC);
+    render_time(ms_val);
 
     seg_display.drawColon(true);
     seg_display.writeDisplay();
@@ -314,13 +351,12 @@ void loop()
     {
         if(timer_elapsed >= timer_setpoint)
         {
-            seg_display.blinkRate(1);
+            seg_display.blinkRate(HT16K33_BLINK_2HZ);
             timer_running = false;
             is_adjusting = true;
             render_timer_setpoint();
-            //play_melody();
-            delay(3000);
-            seg_display.blinkRate(0);
+            play_melody();
+            seg_display.blinkRate(HT16K33_BLINK_OFF);
         }
     }
 

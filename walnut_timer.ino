@@ -65,14 +65,34 @@ static unsigned long adj_hold_count;
 
 static const melody_tone_s melody_tones[] =
 {
-    {NOTE_C4, NOTE_TYPE_TO_DUR(4)},
-    {NOTE_G3, NOTE_TYPE_TO_DUR(8)},
-    {NOTE_G3, NOTE_TYPE_TO_DUR(8)},
-    {NOTE_A3, NOTE_TYPE_TO_DUR(4)},
-    {NOTE_G3, NOTE_TYPE_TO_DUR(4)},
+    {NOTE_F4, NOTE_TYPE_TO_DUR(8)},
+    {NOTE_G4, NOTE_TYPE_TO_DUR(8)},
+    {NOTE_A4, NOTE_TYPE_TO_DUR(2)},
     {NOTE_OFF, NOTE_TYPE_TO_DUR(4)},
-    {NOTE_B3, NOTE_TYPE_TO_DUR(4)},
-    {NOTE_C4, NOTE_TYPE_TO_DUR(4)}
+    {NOTE_G4, NOTE_TYPE_TO_DUR(8)},
+    {NOTE_A4, NOTE_TYPE_TO_DUR(8)},
+    {NOTE_AS4, NOTE_TYPE_TO_DUR(2)},
+    {NOTE_OFF, NOTE_TYPE_TO_DUR(4)},
+    {NOTE_A4, NOTE_TYPE_TO_DUR(8)},
+    {NOTE_AS4, NOTE_TYPE_TO_DUR(8)},
+    {NOTE_C5, NOTE_TYPE_TO_DUR(2)},
+    {NOTE_OFF, NOTE_TYPE_TO_DUR(4)},
+    {NOTE_F5, NOTE_TYPE_TO_DUR(8)},
+    {NOTE_F5, NOTE_TYPE_TO_DUR(8)},
+    {NOTE_D5, NOTE_TYPE_TO_DUR(4)},
+    {NOTE_C5, NOTE_TYPE_TO_DUR(8)},
+    {NOTE_AS4, NOTE_TYPE_TO_DUR(4)},
+    {NOTE_OFF, NOTE_TYPE_TO_DUR(8)},
+    {NOTE_D5, NOTE_TYPE_TO_DUR(8)},
+    {NOTE_F5, NOTE_TYPE_TO_DUR(4)},
+    {NOTE_GS5, NOTE_TYPE_TO_DUR(4)},
+    {NOTE_F5, NOTE_TYPE_TO_DUR(4)},
+    {NOTE_OFF, NOTE_TYPE_TO_DUR(1)},
+    {NOTE_D5, NOTE_TYPE_TO_DUR(8)},
+    {NOTE_F5, NOTE_TYPE_TO_DUR(4)},
+    {NOTE_D5, NOTE_TYPE_TO_DUR(8)},
+    {NOTE_F5, NOTE_TYPE_TO_DUR(4)},
+    {NOTE_OFF, NOTE_TYPE_TO_DUR(2)}
 };
 
 static void disable_amp(void)
@@ -97,6 +117,8 @@ static void play_melody(void)
     uint16_t idx;
     for(idx = 0; idx < len; idx += 1)
     {
+        wdt_reset();
+
         tone(PIN_AUDIO, melody_tones[idx].freq, melody_tones[idx].dur);
 
         // plus 30 % of duration between notes
@@ -305,11 +327,11 @@ void setup()
     pinMode(PIN_SW1, INPUT_PULLUP);
     pinMode(PIN_SW2, INPUT_PULLUP);
 
-    btn_start_stop.attach(PIN_SW0);
+    btn_start_stop.attach(PIN_SW2);
     btn_start_stop.interval(DEBOUNCE_INTERVAL);
-    btn_adj_down.attach(PIN_SW1);
+    btn_adj_down.attach(PIN_SW0);
     btn_adj_down.interval(DEBOUNCE_INTERVAL);
-    btn_adj_up.attach(PIN_SW2);
+    btn_adj_up.attach(PIN_SW1);
     btn_adj_up.interval(DEBOUNCE_INTERVAL);
 
     timer_setpoint = SEC_TO_MS(DEFAULT_TIMER_SETPOINT_SEC);

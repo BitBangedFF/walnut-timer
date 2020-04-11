@@ -3,6 +3,15 @@
 // - cleanup pitches.h
 // - wdt
 
+// Adafruit 1.2" 4-Digit 7-Segment Display w/I2C Backpack - Green[ID:1268]
+// https://www.adafruit.com/product/1268
+
+// Audio IC Development Tools Adafruit Mono 2.5W Class D Audio Amplifier - PAM8302
+// https://www.adafruit.com/product/2130
+
+// Mini Metal Speaker w/ Wires - 8 ohm 0.5W
+// https://www.adafruit.com/product/1890
+
 #include <avr/wdt.h>
 #include <stdint.h>
 #include <limits.h>
